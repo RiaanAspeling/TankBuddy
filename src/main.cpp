@@ -14,8 +14,10 @@ WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
 AsyncWebServer server(80);
+AsyncEventSource events("/events");
 
 unsigned long lastPoll = 0;
+float waterReading=0.0;
 
 void DebugLog(String text) {
   Serial.println(text); 
@@ -87,6 +89,14 @@ bool loadStaticIPConfig() {
 bool loadConfig() {
   bool isStatic = loadStaticIPConfig();
   return true;
+}
+
+String convertJSON(float *waterlevel) {
+  StaticJsonDocument<512> json;
+  json["waterlevel"] = *waterlevel;
+  String result;
+  serializeJson(json, result);
+  return result;
 }
 
 void configModeCallback(WiFiManager *myWiFiManager)
@@ -193,9 +203,21 @@ void setup() {
 
   connectWifi(!loadedConfig);
 
+  // Setup the web server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(LittleFS, "/index.html", "text/html", false, processDefaults);
   });
+  // Setup the API
+  server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request){
+    String json = convertJSON(&waterReading);
+    request->send(200, "application/json", json);
+    json = String();
+  });
+  events.onConnect([](AsyncEventSourceClient *client){
+    client->send("hello!", NULL, millis(), 10000);
+  });
+  server.addHandler(&events);
+
   server.serveStatic("/", LittleFS, "/");
   server.onNotFound(notFound);
   
@@ -222,6 +244,13 @@ void loop() {
     lastPoll = millis();
     DebugLog("Current IP is " + WiFi.localIP().toString());
     digitalWrite(LED_BUILTIN, HIGH);
+    // Push the water reading to the browser
+    waterReading += 5;
+    if (waterReading > 100) waterReading = 0;
+    String reading = convertJSON(&waterReading);
+    DebugLog(reading);
+    events.send("ping",NULL,millis());
+    events.send(reading.c_str(),"new_readings" ,millis());
   }
 
 }
