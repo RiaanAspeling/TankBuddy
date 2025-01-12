@@ -173,6 +173,8 @@ void setup() {
 
   pinMode(32, ANALOG);
 
+  pinMode(33, ANALOG);
+
   Serial.begin(115200);
 
 // Wait for serial console to connect
@@ -210,8 +212,8 @@ void setup() {
 
 }
 
-int high = 0;
-int low = 9999;
+double high = 0;
+double low = 9999;
 int count = 0;
 int diffTotal = 0;
 int readingTotal = 0;
@@ -230,42 +232,39 @@ void loop() {
     lastPoll = millis();
     //DebugLog("Current IP is " + WiFi.localIP().toString());
     
-    for (int i = 1; i <= 500; i++){
-      int reading = analogRead(32);
+    int readingOne = analogRead(32);
+    int readingTwo = analogRead(33);
 
-      if (reading > high){high = reading;};
-      if (reading < low){low = reading;};
+    double reading = (readingOne + readingTwo)/2;
 
-      int diff = high - low;
+    if (reading > high){high = reading;};
+    if (reading < low){low = reading;};
 
-      count++;
-      readingTotal = readingTotal + reading;
-      diffTotal = diffTotal + diff;
-    }
-    
-    // int reading = analogRead(32);
+    int diff = high - low;
 
-    // if (reading > high){high = reading;};
-    // if (reading < low){low = reading;};
-
-    // int diff = high - low;
-
-    // count++;
-    // readingTotal = readingTotal + reading;
-    // diffTotal = diffTotal + diff;
+    count++;
+    readingTotal = readingTotal + reading;
+    diffTotal = diffTotal + diff;
     double diffAvg = diffTotal/count;
     double readingAvg = readingTotal/count;
 
-    DebugLog("-----------------------------------------------------------");
-    DebugLog("HIGH: " + String(high) + "\tLOW: " + String(low) + /*"\tDIFF: " + String(diff) + */"\tAVG: " + String(diffAvg));
-    DebugLog("HIGH: " + String(high*0.09) + "cm\tLOW: " + String(low*0.09) + /*"cm\tDIFF: " + String(diff*0.09) + */"cm\tAVG: " + String(diffAvg*0.09) + "cm");
-    DebugLog(/*"Reading raw:\t" + String(reading) + */"\t\tAVG: " + String(readingAvg));
-    DebugLog(/*"Reading cm:\t" + String(reading*0.09) + "cm" + */"\t\tAVG: " + String(readingAvg*0.09) + "cm");
-    DebugLog("-----------------------------------------------------------");
+    if (count >= 60){
+      DebugLog("-----------------------------------------------------------");
+      DebugLog("ONE: " + String(readingOne) + "\tTWO: " + String(readingTwo));
+      DebugLog("HIGH: " + String(high) + "\tLOW: " + String(low) + "\tDIFF: " + String(diff) + "\tAVG: " + String(diffAvg));
+      DebugLog("HIGH: " + String(high*0.09) + "cm\tLOW: " + String(low*0.09) + "cm\tDIFF: " + String(diff*0.09) + "cm\tAVG: " + String(diffAvg*0.09) + "cm");
+      DebugLog("Reading raw:\t" + String(reading) + "\t\tAVG: " + String(readingAvg));
+      DebugLog("Reading cm:\t" + String(reading*0.09) + "cm" + "\t\tAVG: " + String(readingAvg*0.09) + "cm");
+      DebugLog("-----------------------------------------------------------");
+
+      delay(10000);
+    }
+    else{
+      DebugLog(String(61-count)+"s left");
+    }
+    
     
     digitalWrite(LED_BUILTIN, HIGH);
-
-    delay(20000);
   }
 
 }
