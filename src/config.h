@@ -8,4 +8,4 @@ IPAddress STATIC_SUB = IPAddress(0,0,0,0);
 IPAddress STATIC_GW = IPAddress(0,0,0,0); 
 IPAddress STATIC_DNS = IPAddress(0,0,0,0);
 
-unsigned long POLL_INTERVAL = 5000;
+unsigned long POLL_INTERVAL = 1000;

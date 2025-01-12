@@ -181,6 +181,10 @@ void setup() {
   // LED
   pinMode(LED_BUILTIN, OUTPUT);
 
+  pinMode(32, ANALOG);
+
+  pinMode(33, ANALOG);
+
   Serial.begin(115200);
 
 // Wait for serial console to connect
@@ -230,6 +234,12 @@ void setup() {
 
 }
 
+double high = 0;
+double low = 9999;
+int count = 0;
+int diffTotal = 0;
+int readingTotal = 0;
+
 void loop() {
   if (!WiFi.isConnected()) {
       DebugLog("WiFi connection lost ...");
@@ -242,7 +252,40 @@ void loop() {
   if (millis() - lastPoll > POLL_INTERVAL) {
     digitalWrite(LED_BUILTIN, LOW);
     lastPoll = millis();
-    DebugLog("Current IP is " + WiFi.localIP().toString());
+    //DebugLog("Current IP is " + WiFi.localIP().toString());
+    
+    int readingOne = analogRead(32);
+    int readingTwo = analogRead(33);
+
+    double reading = (readingOne + readingTwo)/2;
+
+    if (reading > high){high = reading;};
+    if (reading < low){low = reading;};
+
+    int diff = high - low;
+
+    count++;
+    readingTotal = readingTotal + reading;
+    diffTotal = diffTotal + diff;
+    double diffAvg = diffTotal/count;
+    double readingAvg = readingTotal/count;
+
+    if (count >= 60){
+      DebugLog("-----------------------------------------------------------");
+      DebugLog("ONE: " + String(readingOne) + "\tTWO: " + String(readingTwo));
+      DebugLog("HIGH: " + String(high) + "\tLOW: " + String(low) + "\tDIFF: " + String(diff) + "\tAVG: " + String(diffAvg));
+      DebugLog("HIGH: " + String(high*0.09) + "cm\tLOW: " + String(low*0.09) + "cm\tDIFF: " + String(diff*0.09) + "cm\tAVG: " + String(diffAvg*0.09) + "cm");
+      DebugLog("Reading raw:\t" + String(reading) + "\t\tAVG: " + String(readingAvg));
+      DebugLog("Reading cm:\t" + String(reading*0.09) + "cm" + "\t\tAVG: " + String(readingAvg*0.09) + "cm");
+      DebugLog("-----------------------------------------------------------");
+
+      delay(10000);
+    }
+    else{
+      DebugLog(String(61-count)+"s left");
+    }
+    
+    
     digitalWrite(LED_BUILTIN, HIGH);
     // Push the water reading to the browser
     waterReading += 5;
