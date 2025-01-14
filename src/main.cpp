@@ -3,7 +3,7 @@
 #include "WiFiClient.h"
 #include "WiFiManager.h"
 #include "ESPAsyncWebServer.h"
-#include "ArduinoJSON.h"
+#include "ArduinoJson.h"
 #include "LittleFS.h"
 #include "ElegantOTA.h"
 #include "WebSerialLite.h"
@@ -290,10 +290,10 @@ void loop() {
     // Push the water reading to the browser
     waterReading += 5;
     if (waterReading > 100) waterReading = 0;
-    String reading = convertJSON(&waterReading);
-    DebugLog(reading);
+    String reading2 = convertJSON(&waterReading);
+    DebugLog(reading2);
     events.send("ping",NULL,millis());
-    events.send(reading.c_str(),"new_readings" ,millis());
+    events.send(reading2.c_str(),"new_readings" ,millis());
   }
 
 }
