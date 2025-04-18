@@ -9,6 +9,14 @@
 #include "WebSerialLite.h"
 #include "PubSubClient.h"
 #include "config.h"
+#include "./Hardware/Blinker.h"
+#include "./Hardware/WaterLevel.h"
+
+#define FORCE_CONFIG_MODE_PIN 15
+#define WATERLEVEL_PIN 32
+
+TBlinkerManager tblinker(LED_BUILTIN, 1000);
+TWaterLevelManager twaterlevel(WATERLEVEL_PIN, 4095, 1000);
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -16,8 +24,8 @@ PubSubClient mqttClient(wifiClient);
 AsyncWebServer server(80);
 AsyncEventSource events("/events");
 
+bool shouldSaveConfig = false;
 unsigned long lastPoll = 0;
-float waterReading=0.0;
 
 void DebugLog(String text) {
   Serial.println(text); 
@@ -37,7 +45,7 @@ void connectLittleFS() {
 
 void saveStaticIPConfig() {
   Serial.println(F("Saving Static IP"));
-  DynamicJsonDocument json(2048);
+  JsonDocument json;
   json["STATIC_IP"] = STATIC_IP.toString();
   json["STATIC_SUB"] = STATIC_SUB.toString();
   json["STATIC_GW"] = STATIC_GW.toString();
@@ -67,7 +75,7 @@ bool loadStaticIPConfig() {
     return false;
   }
   Serial.println("Reading " + String(JSON_CONFIG_FILE));
-  DynamicJsonDocument json(2048);
+  JsonDocument json;
   DeserializationError error = deserializeJson(json, configFile);
   serializeJsonPretty(json, Serial);
   if (error) {
@@ -86,13 +94,8 @@ bool loadStaticIPConfig() {
           STATIC_DNS != IPAddress(0,0,0,0);
 }
 
-bool loadConfig() {
-  bool isStatic = loadStaticIPConfig();
-  return true;
-}
-
 String convertJSON(float *waterlevel) {
-  StaticJsonDocument<512> json;
+  JsonDocument json;
   json["waterlevel"] = *waterlevel;
   String result;
   serializeJson(json, result);
@@ -110,50 +113,54 @@ void configModeCallback(WiFiManager *myWiFiManager)
   DebugLog(WiFi.softAPIP().toString());
 }
 
+void saveConfigCallback () {
+  DebugLog("Should save config");
+  shouldSaveConfig = true;
+}
+
 void connectWifi(bool forceConfig)
 {
-    // Setup wifi and manager
+  DebugLog("Starting connectWifi");
+  // Setup wifi and manager
   WiFi.mode(WIFI_STA);
   WiFiManager wm;
   wm.setBreakAfterConfig(true);
-  // wm.setSaveConfigCallback(saveConfigCallback);
+  wm.setSaveConfigCallback(saveConfigCallback);
   wm.setAPCallback(configModeCallback);
 
-  // // Create custom data for configuration
-  // WiFiManagerParameter wc_victron_address("VICTRON_HOST", "Victron MQTT Address/Host", VICTRON_HOST, 50);   wm.addParameter(&wc_victron_address);
-  // IntParameter wc_victron_port("VICTRON_PORT", "Victron MQTT Port", VICTRON_PORT);                          wm.addParameter(&wc_victron_port);
-  // StringParameter wc_victron_id("VICTRON_ID", "Victron Id", VICTRON_ID);                                    wm.addParameter(&wc_victron_id);
-
-  if (forceConfig) {
+  if (forceConfig || !wm.getWiFiIsSaved()) {
+    // Create custom data for configuration
+    loadStaticIPConfig();
+    WiFiManagerParameter wc_static_ip("STATIC_IP", "IP Address", STATIC_IP.toString().c_str(), 16);       wm.addParameter(&wc_static_ip);
+    WiFiManagerParameter wc_static_sub("STATIC_SUB", "Subnet mask", STATIC_SUB.toString().c_str(), 16);   wm.addParameter(&wc_static_sub);
+    WiFiManagerParameter wc_static_gw("STATIC_GW", "Gateway", STATIC_GW.toString().c_str(), 16);          wm.addParameter(&wc_static_gw);
+    WiFiManagerParameter wc_static_dns("STATIC_DNS", "DNS", STATIC_DNS.toString().c_str(), 16);           wm.addParameter(&wc_static_dns);
+    DebugLog("Starting the portal");
     wm.startConfigPortal();
-    Serial.println("Restarting and resettings Static IP!");
-    STATIC_IP = IPAddress(0,0,0,0);
-    STATIC_SUB = IPAddress(0,0,0,0);
-    STATIC_GW = IPAddress(0,0,0,0);
-    STATIC_DNS = IPAddress(0,0,0,0);
-    saveStaticIPConfig();
+    if (shouldSaveConfig) {
+      STATIC_IP.fromString(wc_static_ip.getValue());
+      STATIC_SUB.fromString(wc_static_sub.getValue());
+      STATIC_GW.fromString(wc_static_gw.getValue());
+      STATIC_DNS.fromString(wc_static_dns.getValue());
+      saveStaticIPConfig();
+    }
+    DebugLog("Restarting!");
     delay(2000);
     ESP.restart();
     return;
   }
 
-  if (wm.getWiFiIsSaved()) {
-    Serial.println("Connecting to " + wm.getWiFiSSID());
-    if (loadStaticIPConfig()) {
-      Serial.println("Configure IP: " + STATIC_IP.toString() + "/" + STATIC_SUB.toString() + " GW:" + STATIC_GW.toString() + " DNS:" + STATIC_DNS.toString());
-      WiFi.config(STATIC_IP, STATIC_GW, STATIC_SUB, STATIC_DNS);
-    }
+  DebugLog("Connecting to " + wm.getWiFiSSID());
+  if (loadStaticIPConfig()) {
+    DebugLog("Configure IP: " + STATIC_IP.toString() + "/" + STATIC_SUB.toString() + " GW:" + STATIC_GW.toString() + " DNS:" + STATIC_DNS.toString());
+    WiFi.config(STATIC_IP, STATIC_GW, STATIC_SUB, STATIC_DNS);
   }
-  else
-  {
-    Serial.println("Connect to configure:");
-    Serial.println(wm.getDefaultAPName());
-  }
+  DebugLog("MAC Address: " + WiFi.macAddress());
+
   bool canConnect = wm.autoConnect();
-  
   if (!canConnect)
   {
-    Serial.println("Failed to connect, restarting!");
+    DebugLog("Failed to connect, restarting!");
     delay(5000);
     ESP.restart();
   }
@@ -174,20 +181,26 @@ void notFound(AsyncWebServerRequest *request) {
     request->send(404, "text/plain", "Not found");
 }
 
+void onReadingReceived() {
+  float reading = twaterlevel.GetLastReading();
+  String json = convertJSON(&reading);
+  DebugLog(json);
+  events.send(json.c_str(), "new_readings", millis());
+}
+
 void setup() {
 
   // Forced setup mode
-  pinMode(15, INPUT_PULLUP);
+  pinMode(FORCE_CONFIG_MODE_PIN, INPUT_PULLUP);
   // LED
   pinMode(LED_BUILTIN, OUTPUT);
 
   pinMode(32, ANALOG);
-
   pinMode(33, ANALOG);
 
   Serial.begin(115200);
 
-// Wait for serial console to connect
+  // Wait for serial console to connect
   for (int i = 0; i < 5; i++) {
     digitalWrite(LED_BUILTIN, LOW);
     delay(500);
@@ -198,14 +211,14 @@ void setup() {
   
   connectLittleFS();
 
-  bool loadedConfig = loadConfig();
+  bool forceConfig = false;
 
   // Check if we're in forced setup mode
-  if (digitalRead(15) == LOW) {
-    loadedConfig = false;
+  if (digitalRead(FORCE_CONFIG_MODE_PIN) == LOW) {
+    forceConfig = true;
   }
 
-  connectWifi(!loadedConfig);
+  connectWifi(forceConfig);
 
   // Setup the web server
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -213,12 +226,12 @@ void setup() {
   });
   // Setup the API
   server.on("/readings", HTTP_GET, [](AsyncWebServerRequest *request){
-    String json = convertJSON(&waterReading);
+    String json = "{\"waterlevel\": 82}";
     request->send(200, "application/json", json);
     json = String();
   });
   events.onConnect([](AsyncEventSourceClient *client){
-    client->send("hello!", NULL, millis(), 10000);
+    client->send("Welcome!", NULL, millis(), 10000);
   });
   server.addHandler(&events);
 
@@ -230,15 +243,12 @@ void setup() {
   
   server.begin();
 
+  // Setup sensor
+  twaterlevel.onReading(onReadingReceived);
+
   DebugLog("Started!!");
 
 }
-
-double high = 0;
-double low = 9999;
-int count = 0;
-int diffTotal = 0;
-int readingTotal = 0;
 
 void loop() {
   if (!WiFi.isConnected()) {
@@ -247,53 +257,27 @@ void loop() {
     return;
   }
   ElegantOTA.loop();
+  tblinker.Loop();
+  twaterlevel.Loop();
 
-  // Check the current time is larger than the POLL_INTERVAL
-  if (millis() - lastPoll > POLL_INTERVAL) {
-    digitalWrite(LED_BUILTIN, LOW);
-    lastPoll = millis();
-    //DebugLog("Current IP is " + WiFi.localIP().toString());
+  // // Check the current time is larger than the POLL_INTERVAL
+  // if (millis() - lastPoll > POLL_INTERVAL) {
+  //   digitalWrite(LED_BUILTIN, LOW);
+  //   lastPoll = millis();
+  //   //DebugLog("Current IP is " + WiFi.localIP().toString());
     
-    int readingOne = analogRead(32);
-    int readingTwo = analogRead(33);
+  //   int readingOne = analogRead(32);
+  //   int readingTwo = analogRead(33);
 
-    double reading = (readingOne + readingTwo)/2;
-
-    if (reading > high){high = reading;};
-    if (reading < low){low = reading;};
-
-    int diff = high - low;
-
-    count++;
-    readingTotal = readingTotal + reading;
-    diffTotal = diffTotal + diff;
-    double diffAvg = diffTotal/count;
-    double readingAvg = readingTotal/count;
-
-    if (count >= 60){
-      DebugLog("-----------------------------------------------------------");
-      DebugLog("ONE: " + String(readingOne) + "\tTWO: " + String(readingTwo));
-      DebugLog("HIGH: " + String(high) + "\tLOW: " + String(low) + "\tDIFF: " + String(diff) + "\tAVG: " + String(diffAvg));
-      DebugLog("HIGH: " + String(high*0.09) + "cm\tLOW: " + String(low*0.09) + "cm\tDIFF: " + String(diff*0.09) + "cm\tAVG: " + String(diffAvg*0.09) + "cm");
-      DebugLog("Reading raw:\t" + String(reading) + "\t\tAVG: " + String(readingAvg));
-      DebugLog("Reading cm:\t" + String(reading*0.09) + "cm" + "\t\tAVG: " + String(readingAvg*0.09) + "cm");
-      DebugLog("-----------------------------------------------------------");
-
-      delay(10000);
-    }
-    else{
-      DebugLog(String(61-count)+"s left");
-    }
+  //   digitalWrite(LED_BUILTIN, HIGH);
     
-    
-    digitalWrite(LED_BUILTIN, HIGH);
-    // Push the water reading to the browser
-    waterReading += 5;
-    if (waterReading > 100) waterReading = 0;
-    String reading2 = convertJSON(&waterReading);
-    DebugLog(reading2);
-    events.send("ping",NULL,millis());
-    events.send(reading2.c_str(),"new_readings" ,millis());
-  }
+  //   // Push the water reading to the browser
+  //   waterReading += 5;
+  //   if (waterReading > 100) waterReading = 0;
+  //   String reading2 = convertJSON(&waterReading);
+  //   DebugLog(reading2);
+  //   events.send("ping",NULL,millis());
+  //   events.send(reading2.c_str(),"new_readings" ,millis());
+  // }
 
 }

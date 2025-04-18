@@ -12,8 +12,8 @@ void WebSerialClass::begin(AsyncWebServer *server, const char *url, const String
       return request->requestAuthentication();
     }
     // Send Webpage
-    AsyncWebServerResponse *response = request->beginResponse_P(
-        200, "text/html", WEBSERIAL_HTML, WEBSERIAL_HTML_SIZE);
+    // RRA - AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", WEBSERIAL_HTML, WEBSERIAL_HTML_SIZE);
+    AsyncWebServerResponse *response = request->beginResponse(200, "text/html", WEBSERIAL_HTML, WEBSERIAL_HTML_SIZE);
     response->addHeader("Content-Encoding", "gzip");
     request->send(response);
   });
