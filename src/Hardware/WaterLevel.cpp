@@ -1,6 +1,8 @@
 #include "WaterLevel.h"
 
 TWaterLevelManager::TWaterLevelManager(int pin, int maxRange, int intervalMs) {
+    analogReadResolution(10);
+    analogSetAttenuation(ADC_2_5db);  //For all pins
     pinMode(pin, ANALOG);
     this->pin = pin;
     this->maxRange = maxRange;
