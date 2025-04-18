@@ -19,7 +19,10 @@ class WaterLevelGauge {
             highlightThreshold: 0,
             majorTicks: [10, 20, 30, 40, 50, 60, 70, 80, 90],
             animationDuration: 3000,
-            decimals: 2
+            decimals: 2,
+            waveFrequency: 4,  // Number of waves across the gauge
+            waveAmplitude: 5,  // Height of waves in pixels
+            waveSpeed: 0.1     // Speed of wave animation
         };
         
         // Override defaults with provided options
@@ -31,6 +34,27 @@ class WaterLevelGauge {
         this.targetValue = 0;
         this.animationStart = null;
         this.animating = false;
+        this.waveOffset = 0;
+        
+        // Start the wave animation loop
+        this.startWaveAnimation();
+    }
+    
+    startWaveAnimation() {
+        // Animation loop for continuous wave movement
+        const animate = () => {
+            // Only update wave offset if we have a value > 0
+            if (this._value > this.options.minValue) {
+                this.waveOffset += this.options.waveSpeed;
+                if (this.waveOffset > 2 * Math.PI) {
+                    this.waveOffset = 0;
+                }
+                this.draw();
+            }
+            requestAnimationFrame(animate);
+        };
+        
+        animate();
     }
     
     get value() {
@@ -47,12 +71,12 @@ class WaterLevelGauge {
             
             if (!this.animating) {
                 this.animating = true;
-                requestAnimationFrame(this.animate.bind(this));
+                requestAnimationFrame(this.valueAnimate.bind(this));
             }
         }
     }
     
-    animate(timestamp) {
+    valueAnimate(timestamp) {
         if (!this.animationStart) this.animationStart = timestamp;
         const elapsed = timestamp - this.animationStart;
         
@@ -70,7 +94,7 @@ class WaterLevelGauge {
         
         // Continue animation if not finished
         if (progress < 1) {
-            requestAnimationFrame(this.animate.bind(this));
+            requestAnimationFrame(this.valueAnimate.bind(this));
         } else {
             this._value = this.targetValue;
             this.animating = false;
@@ -99,14 +123,10 @@ class WaterLevelGauge {
         // Calculate water height based on value
         const valuePercent = (this._value - opt.minValue) / (opt.maxValue - opt.minValue);
         const waterHeight = (height - 2 * opt.borderWidth) * valuePercent;
-        const waterY = height - opt.borderWidth - waterHeight;
         
-        // Draw water
-        const waterColor = this._value >= opt.highlightThreshold ? opt.highlightColor : opt.waterColor;
-        ctx.fillStyle = waterColor;
-        this.roundRect(ctx, opt.borderWidth, waterY, 
-                        width - 2 * opt.borderWidth, waterHeight, 
-                        [0, 0, 10, 10], true, false);
+        if (waterHeight > 0) {
+            this.drawWater(waterHeight);
+        }
         
         // Draw ticks and values
         this.drawTicks();
@@ -120,6 +140,82 @@ class WaterLevelGauge {
         
         // Update value display
         this.valueDisplay.textContent = this._value.toFixed(opt.decimals) + '%';
+    }
+    
+    drawWater(waterHeight) {
+        const ctx = this.ctx;
+        const opt = this.options;
+        const width = opt.width;
+        const height = opt.height;
+        
+        // Calculate base water position
+        const baseWaterY = height - opt.borderWidth - waterHeight;
+        const waterColor = this._value >= opt.highlightThreshold ? opt.highlightColor : opt.waterColor;
+        
+        // Create clipping region for water
+        ctx.save();
+        ctx.beginPath();
+        this.roundRect(ctx, opt.borderWidth, opt.borderWidth, 
+                       width - 2 * opt.borderWidth, height - 2 * opt.borderWidth, 
+                       10, false, false);
+        ctx.clip();
+        
+        // Draw main water body
+        ctx.fillStyle = waterColor;
+        
+        // Draw waves only if we have a value above minimum
+        if (this._value > opt.minValue) {
+            // Draw wave on top of water
+            ctx.beginPath();
+            
+            const waveFrequency = opt.waveFrequency;
+            const amplitude = opt.waveAmplitude;
+            
+            // Start slightly off-canvas to avoid gaps
+            ctx.moveTo(0, baseWaterY);
+            
+            // Draw wave pattern
+            for (let x = 0; x <= width; x++) {
+                const dx = x / width;
+                const offsetY = Math.sin(dx * waveFrequency * Math.PI * 2 + this.waveOffset) * amplitude;
+                ctx.lineTo(x, baseWaterY + offsetY);
+            }
+            
+            // Complete the water shape
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Add a subtle gradient overlay for depth
+            const gradient = ctx.createLinearGradient(0, baseWaterY, 0, height);
+            
+            // Create a transparent version of the water color for the gradient
+            let alphaColor;
+            if (waterColor.startsWith('rgba')) {
+                // If it's already rgba, adjust the alpha
+                alphaColor = waterColor.replace(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)/, 'rgba($1, $2, $3, 0.2)');
+            } else if (waterColor.startsWith('rgb')) {
+                // If it's rgb, convert to rgba
+                alphaColor = waterColor.replace(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/, 'rgba($1, $2, $3, 0.2)');
+            } else {
+                // For hex or named colors, just use with reduced opacity
+                alphaColor = waterColor;
+                ctx.globalAlpha = 0.2;
+            }
+            
+            gradient.addColorStop(0, alphaColor);
+            gradient.addColorStop(1, waterColor);
+            
+            if (!waterColor.startsWith('rgba') && !waterColor.startsWith('rgb')) {
+                ctx.globalAlpha = 1; // Reset alpha if we changed it
+            }
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(opt.borderWidth, baseWaterY, width - 2 * opt.borderWidth, waterHeight);
+        }
+        
+        ctx.restore();
     }
     
     drawTicks() {
@@ -195,7 +291,10 @@ var gaugeWaterLevel = new WaterLevelGauge('gauge-waterlevel', {
     decimals: 1,
     highlightThreshold: 50,
     highlightColor: 'rgba(8, 125, 235, 0.75)',
-    waterColor: 'rgba(54, 5, 233, 0.8)'
+    waterColor: 'rgba(8, 195, 219, 0.8)',
+    waveFrequency: 5,     // Number of waves across the gauge
+    waveAmplitude: 3,     // Height of waves in pixels
+    waveSpeed: 0.08       // Speed of wave animation
 });
 
 // Function to get current readings on the web page when it loads

@@ -5,32 +5,24 @@ body {
     background-color: #f4f4f4;
 }
 
-h1 {
-    text-align: center;
-    color: #333;
-}
-
-.topnav {
-    overflow: hidden;
-    background-color: #333;
-    text-align: center;
-}
-
-.topnav h1 {
-    margin: 10px;
-}
-
-.topnav a {
-    color: white;
-    text-decoration: none;
-}
-
 .content {
     padding: 20px;
 }
 
+.card-header {
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.card-footer {
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+}
+
 .card-grid {
-    max-width: 800px;
+    max-width: 300px;
     margin: 0 auto;
 }
 
@@ -45,7 +37,8 @@ h1 {
 .card-title {
     font-size: 1.5em;
     font-weight: bold;
-    margin-bottom: 30px;
+    margin-top: 0px;
+    margin-bottom: 0px;
 }
 
 #gauge-container {
@@ -62,4 +55,18 @@ h1 {
     text-align: center;
     font-size: 24px;
     font-weight: bold;
+}
+
+.version-info {
+    font-size: 0.8em;
+    color: #666;
+}
+
+.version-info a {
+    text-decoration: none;
+    color: inherit;
+}
+
+.version-info a:hover {
+    text-decoration: underline;
 }

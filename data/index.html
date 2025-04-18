@@ -6,19 +6,19 @@
     <link rel="stylesheet" type="text/css" href="./style.css">
 </head>
 <body>
-    <h1>Version %FIRMWARE_VERSION%</h1>
-    <div class="topnav">
-        <h1><a href="./update">GAUGES</a></h1>
-    </div>
     <div class="content">
         <div class="card-grid">
             <div class="card">
-                <p class="card-title">Water Level</p>
+                <div class="card-header">
+                    <p class="card-title">Water Level</p>
+                </div>
                 <div id="gauge-container">
                     <canvas id="gauge-waterlevel" width="200" height="400"></canvas>
                     <div class="gauge-value" id="water-level-value"></div>
                 </div>
-            </div>
+                <div class="card-footer">
+                    <span class="version-info"><a href="./update">Version %FIRMWARE_VERSION%</a></span>
+                </div>
         </div>
     </div>
     <script src="./script.js"></script>
